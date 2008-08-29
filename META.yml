@@ -1,0 +1,24 @@
+---
+abstract: 'An implementation of macro processor'
+author:
+  - 'Goro Fuji <gfuji(at)cpan.org>.'
+build_requires:
+  Test::Warn: 0.11
+distribution_type: module
+generated_by: 'Module::Install version 0.77'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: macro
+no_index:
+  directory:
+    - inc
+    - t
+requires:
+  Filter::Util::Call: 1.06
+  PPI: 1.2
+  perl: 5.8.1
+resources:
+  license: http://dev.perl.org/licenses/
+version: 0.01

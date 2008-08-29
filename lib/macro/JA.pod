@@ -1,0 +1,209 @@
+
+=encoding utf-8
+
+=head1 NAME
+
+macro::JA - マクロプロセッサ
+
+=head1 SYNOPSIS
+
+	use macro add => sub{ $_[0] + $_[1] };
+	say add(1, 3); # it's replaced into 'say do{ (1) + (3) };'
+
+	use macro sum => sub{ my $sum=0; for my $v(@_){ $sum+=$v }; $sum };
+	say sum(1, 2, 3); # => 6
+
+	use macro my_if => sub{ $_[0] ? $_[1] : $_[2] };
+	my_if( 0, print('true'), print('false') ); # only 'false' is printed
+
+	# or compile only
+	$ perl -c Module.pm # makes Module.pmc
+
+
+=head1 DESCRIPTION
+
+C<macro>プラグマはCのプリプロセッサに似た一種のインライン関数を提供する。
+
+このマクロは非常に高速だが，Cプリプロセッサのマクロと同じ制限もある。たとえば，
+マクロの中でC<return()>を呼ぶと期待通りには動作しない。マクロの定義は無名関数
+の宣言に見えるが，実際には関数のように動作するわけではない。
+
+マクロが展開される様子は，環境変数C<PERL_MACRO_DEBUG>にC<2>を指定することに
+よって知ることができる。
+
+=head2 MACRO CALL
+
+マクロの呼び出しは関数の呼び出しに似ており，マクロの名前の後に括弧で括った引数
+リストを付けて呼び出す。引数リストの括弧を省略することはできない。
+
+C<&>を付けた関数呼び出しやアロー演算子によるメソッド呼び出しははマクロ呼び出しとは見做されないが，間接オブジェクト構文によるメソッド呼び出しはマクロ呼び出しと
+区別がつかず，誤って展開される可能性がある。
+
+また，マクロはファイルスコープであり，マクロを定義したスクリプトファイルの外から
+参照することはできない。
+
+
+なお，PPIの制限により，ダブルクォートの中の式展開や，C<s/regex/expr/e>の式展開は
+パースされず，その結果マクロの展開も行われない。
+
+
+=head2 MACRO ARGUMENTS
+
+マクロの展開はCプリプロセッサに似ている。
+
+マクロの定義において，C<@_>やC<$_[0]>によってマクロの実引数を参照できる。
+たとえば，C<$_[0]>はマクロ呼び出しの第一引数に置き換えられる。
+これは関数の引数に似ているが，まったく異なり，C<@_>のようなトークンを
+実際の値に置き換えている。このとき，C<$_[0]>というのはこれで単一のトークン
+として扱われ，添字として使えるのは単純な数値だけである。たとえば，C<$_[$i]>は
+マクロの引数としては扱われず，マクロを呼び出した関数の引数を参照する。
+
+Cプリプロセッサのマクロと同じく，C<$_[0]>を参照しなければ第一引数は評価されず，
+C<$_[0]>を複数回参照すれば，第一引数は複数回評価される。
+ただし，Cプリプロセッサと違い，C<$_[0]>によって置き換えられる第一引数
+は常に単項プラス演算子が前に置かれ，括弧で囲まれる（つまりC<+(expr)>となる）。
+これは以下のようなマクロ定義を正しくおこなうためである。
+
+	use macro say => sub{ print @_, "\n" };
+	say('Hello, world!');
+
+この引数のプレースホルダC<@_>は以下のように置き換えられる。
+
+	print +('Hello, world!'), "\n";
+
+引数の扱いでは実行時のコンテキストが考慮されず，Cプリプロセッサのように
+評価する点でも関数の呼び出しとは異なる。
+
+	use macro my_each => sub{ foreach ($_[0]) { $_[1] } };
+	my_each( (@a, @b, @c), say($_) );
+
+これは以下のように置き換えられる。
+
+	foreach ( +(@a, @b, @c) ){ +(say($_)) }
+
+ダブルクォートの中の引数プレースホルダは置き換えられない。
+以下のマクロのC<$_[0]>は展開されず，マクロの呼び出し元の引数が参照される。
+
+	use macro println => sub{ print "@_\n" }; # おそらく予想外の挙動
+
+=head2 BACKEND MODULE
+
+このモジュールのバックエンドとして，C<macro::filter>とC<macro::compiler>が
+存在する。
+
+C<macro::filter>はソースフィルタとして働くため，コンパイル速度が非常に遅い。
+
+C<macro::compiler>はC<Module::Compile>に似たスクリプトコンパイラとして動作し，
+ファイルの末尾にC<c>が付加されたスクリプトファイルを生成する
+（たとえば，C<Foo.pm>からはC<Foo.pmc>が作られる）。PerlのC<use Foo>
+ディレクティブはC<Foo.pmc>が存在すればC<Foo.pmc>を読み込むので，コンパイル済み
+のスクリプトファイルは常に高速に動作する。C<Module::Compile>と異なり，
+C<macro.pm>はコンパイル済みファイルについていかなるチェックも行わないので，
+注意したほうがいいかもしれない。
+
+マクロを使うスクリプトの開発中は，C<PERL_MACRO_DEBUG>にC<1>を指定することで
+バックエンドとしてC<macro::filter>の使用を強制できるようになっている。
+
+perlを-cスイッチと共に使うことで，C<macro::compiler>によるコンパイルのみを行う
+こともできる。
+
+バックエンドモジュールをロード後に変更することはできないが，バックエンド
+モジュールを直接C<use>することはできる。
+
+実行時の速度はどちらのバックエンドも変わらない。
+
+=head2 TODO
+
+C<macro::compiler>の動作を安定させる。
+現状では，C<macro::filter>とC<macro::compiler>の挙動が微妙に異なる。
+C<macro::filter>はC<use>ディレクティブ後にのみ影響があり，
+複数のC<use>ディレクティブが有効だが，C<macro::compiler>はC<use>ディレクティブ
+以前のマクロ呼び出しも展開してしまう。
+また，C<macro::compiler>を複数C<use>すると結果が不安定である。
+
+=head1 METHOD
+
+=head2 macro->backend()
+
+バックエンドモジュールを返す。これはC<macro::filter>かC<macro::compiler>である。
+
+=head2 macro->new()
+
+マクロプロセッサのインスタンスC<$macro>を返す。
+
+=head2 $macro->defmacro(name => sub{ ... })
+
+マクロプロセッサI<$macro>にマクロを定義する。
+
+=head2 $macro->process($source)
+
+PerlソースコードI<$source>を受け取り，マクロ展開を行ったソースコードを返す。
+
+C<new()>, C<defmacro()>, C<process()>はバックエンドモジュールを
+実装するためのメソッドである。
+
+=head1 CONFIGURATION AND ENVIRONMENT
+
+=head2 PERL_MACRO_DEBUG=value
+
+デバッグモード。
+
+この値を指定しないか0であれば，C<macro::compiler>がバックエンドとして使われる。
+
+この値が1より大きければ，C<macro::filter>がバックエンドとして使われる。
+
+この値が2より大きければ，マクロの展開の様子がC<STDERR>に出力される。
+
+=head1 INSTALL
+
+To install this module, run the following commands:
+
+	perl Makefile.PL
+	make
+	make test
+	make install
+
+=head1 DEPENDENCIES
+
+=over 4
+
+=item *
+
+Perl 5.8.1 or later.
+
+=item *
+
+C<PPI> - Perl parser.
+
+=item *
+
+C<Filter::Util::Call> - Source filter utility.
+
+=back
+
+=head1 BUGS AND LIMITATIONS
+
+No bugs have been reported.
+
+Please report any bugs or feature requests to
+C<bug-macro@rt.cpan.org/>, or through the web interface at
+L<http://rt.cpan.org/>.
+
+=head1 SEE ALSO
+
+L<macro::filter> - source filter backend.
+
+L<macro::compiler> - compiler backend.
+
+=head1 AUTHOR
+
+Goro Fuji E<lt>gfuji(at)cpan.orgE<gt>.
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (c) 2008, Goro Fuji E<lt>gfuji(at)cpan.orgE<gt>. Some rights reserved.
+
+This module is free software; you can redistribute it and/or
+modify it under the same terms as Perl itself.
+
+=cut
