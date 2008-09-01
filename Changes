@@ -1,5 +1,11 @@
 Revision history for macro
 
-0.01 Fri Aug 29 11:54:12 2008
+0.02 Mon Sep  1 09:11:05 2008
+	- add freshness check to macro::compiler
+	- fix scope-lexicality
+	- fix multiple 'use macro::compiler' statements
+	- report line numbers in PERL_MACRO_DEBUG=2
+
+0.01  Tue Aug 26 23:35:26 2008
 	- original version; created by Module::Starter
 

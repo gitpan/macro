@@ -1,13 +1,17 @@
 #!perl -w
-
 # Macro Compiling Timer
+# mxtime.pl example/simple.pm
 
 use strict;
 use Benchmark ();
 
 exit unless @ARGV;
 
+$ENV{PERL_MACRO_DEBUG} = 1
+	unless defined $ENV{PERL_MACRO_DEBUG};
+
 my $start = Benchmark->new();
+
 
 require macro;
 require macro::filter;

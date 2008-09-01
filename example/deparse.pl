@@ -7,8 +7,8 @@ use macro::filter
 	square => sub{ $_[0] + $_[0] },
 	say    => sub{ print @_, "\n" };
 
-print add(10-1, (1, 2)), "\n";
-print square(10), "\n";
+say( add(10-1, (1, 2)) );
+say( square(10) );
 
 say();
 say("foo");

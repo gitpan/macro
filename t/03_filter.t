@@ -2,12 +2,18 @@
 
 use strict;
 
-use Test::More tests => 6;
+use Test::More tests => 10;
 
 use FindBin qw($Bin);
 use lib "$Bin/tlib";
 
-BEGIN{ $ENV{PERL_MACRO_DEBUG} = 1 }
+BEGIN{
+	unlink "$Bin/tlib/Foo.pmc";
+	unlink "$Bin/tlib/Bar.pmc";
+
+	$ENV{PERL_MACRO_DEBUG} = 1;
+}
+
 use macro;
 
 is(macro::->backend, 'macro::filter', 'using macro::filter');
@@ -24,5 +30,12 @@ is Foo::g(), 'Foo::g', 'Foo::g()';
 is Bar::f(), 'Bar::f', 'Bar::f()';
 is Bar::g(), 'Bar::g', 'Bar::g()';
 
-is _f(),     'Baz';
+is Foo::h(), 'func', 'lexicality in Foo';
+is Bar::h(), 'func', 'lexicality in Bar';
+
+
+is Foo::line(), Foo::correct_line(), 'Foo: correct lineno';
+is Bar::line(), Bar::correct_line(), 'Bar: correct lineno';
+
+is _f(),     'Baz', 'file scoped';
 

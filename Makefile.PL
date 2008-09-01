@@ -6,7 +6,10 @@ name 'macro';
 
 all_from 'lib/macro.pm';
 
-requires 'PPI'                => 1.20;
+# "For completeness sake, add support for empty documents",
+#  by PPI-1.2004_01/Changes
+requires 'PPI'                => 1.203;
+
 requires 'Filter::Util::Call' => 1.06;
 
 test_requires 'Test::Warn' => 0.11;

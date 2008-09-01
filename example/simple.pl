@@ -2,10 +2,32 @@
 
 use strict;
 
-use macro::filter
-	mul => sub{ $_[0] * $_[1] },
-	say => sub{ print @_, "\n" };
+BEGIN{ $ENV{PERL_MACRO_DEBUG} ||= 0 }
 
-say('Hello, world!');
+use macro say => sub{ print @_, "\n" };
 
-say(q{mul(1+2, 3+4) = }, mul( 1+2, 3+4 ));
+{
+	use macro
+		mul => sub{ $_[0] * $_[1] },
+		foo => sub{ 'macro(1)' },
+		;
+
+	say('Hello, world!');
+
+	say(q{mul(1+2, 3+4) = }, mul( 1+2, 3+4 ));
+
+	say('Which is called, subroutine or macro? -> ', foo());
+}
+
+sub foo{
+	'subroutine';
+}
+
+
+say('Which is called, subroutine or macro? -> ', foo());
+
+{
+	use macro foo => sub{ 'macro(2)' };
+
+	say('Which is called, subroutine or macro? -> ', foo());
+}

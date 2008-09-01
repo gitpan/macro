@@ -4,17 +4,36 @@ package
 use strict;
 use warnings;
 
-use macro
-	_f => sub { __PACKAGE__ . '::f' },
-	_g => sub { __PACKAGE__ . '::g' };
+{
+	use macro
+		_f => sub { __PACKAGE__ . '::f' },
+		_g => sub { __PACKAGE__ . '::g' },
+	;
 
 
-sub f{
-	_f();
+	sub f{
+		return _f();
+	}
+
+	sub g{
+		return _g();
+	}
 }
-#use macro _g => sub { __PACKAGE__ . '::g' };
 
-sub g{
-	_g();
+sub _g{
+	return 'func';
 }
+
+sub h{
+	return _g();
+}
+
+sub line{
+	return __LINE__;
+}
+
+sub correct_line{
+	return 32;
+}
+
 1;

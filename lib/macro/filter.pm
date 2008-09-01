@@ -28,11 +28,11 @@ sub import{
 sub filter{
 	my($self) = @_;
 
+	Filter::Util::Call::filter_del();
+
 	1 while Filter::Util::Call::filter_read();
 
 	$_ = $self->process( $_ );
-
-	Filter::Util::Call::filter_del();
 
 	return 1;
 }
@@ -48,6 +48,10 @@ macro::filter - macro.pm source filter backend
 =head1 SYNOPSIS
 
 	use macro::filter add => sub{ $_[0] + $_[1] };
+
+=head1 SEE ALSO
+
+L<macro>.
 
 =head1 AUTHOR
 

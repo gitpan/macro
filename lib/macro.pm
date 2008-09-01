@@ -9,7 +9,7 @@ use warnings::register;
 use Scalar::Util (); # tainted()
 use Carp ();
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use constant DEBUG => $ENV{PERL_MACRO_DEBUG} || 0;
 
@@ -66,12 +66,15 @@ sub defmacro{
 			if(Scalar::Util::tainted($macro)){
 				return Carp::croak('Insecure dependency in macro::defmacro()');
 			}
-			$macro .= ' '; # lex_source() refuses empty strings
+
+			# Empty documents are supported by PPI 1.204_01,
+			# but currently we assume PPI <= 1.203
+			$macro .= ' ';
 		}
 
 		my $mdoc = $lexer->lex_source( $self->process($macro) );
 
-		$mdoc->prune(\&_want_useless_fragment);
+		$mdoc->prune(\&_want_useless_element);
 		warn $@ if $@;
 
 		$self->{$name} = $mdoc;
@@ -98,7 +101,7 @@ sub _deparse{
 	return 'do'.$_deparser->coderef2text($coderef);
 }
 
-sub _want_useless_fragment{
+sub _want_useless_element{
 	my $elem = $_[1];
 
 	# newline
@@ -106,41 +109,79 @@ sub _want_useless_fragment{
 }
 
 sub preprocess{
-	$_[1];# noop
+	return $_[1]; # noop
 }
 sub postprocess{
-	$_[1]; # noop
+	return $_[1]; # noop
 }
 
 sub process{
 	my($self, $src) = @_;
 
-	my $d = $lexer->lex_source($src);
+	my $document = $lexer->lex_source($src);
 
-	$d = $self->preprocess($d) or return;
+	my $d = $self->preprocess($document);
 
-	$d->{macro} = $self;
-	my $words = $d->find(\&_want_macrocall);
-	delete $d->{macro};
+	foreach my $macrocall( reverse _ppi_find($d, \&_want_macrocall, $self) ){
+		$self->_expand($macrocall);
+	}
 
-	if($words){
-		foreach my $word(reverse @$words){
-			$self->_expand($word);
+	$document = $self->postprocess($document, $d);
+
+	return $document->serialize();
+}
+
+# customized find routine (PPI::Node::find is original)
+# * dies on fail
+# * returns found element list, instead of array reference (or false if fails)
+# * supplies the wanted subroutine with other arguments
+sub _ppi_find{
+	my($top, $wanted, @others) = @_;
+
+	my @found = ();
+	my @queue = $top->children;
+	while ( my $elem = shift @queue ) {
+		my $rv = $wanted->( $top, $elem, @others );
+
+		if(defined $rv){
+			push @found, $elem if $rv;
+
+			if($elem->can('children')){
+
+				if($elem->can('start')){
+					unshift @queue,
+							$elem->start,
+							$elem->children,
+							$elem->finish;
+				}
+				else{
+					unshift @queue, $elem->children;
+				}
+			}
+		}
+		else{
+			last;
 		}
 	}
-	elsif($@){
-		warn $@;
-	}
-
-	$d = $self->postprocess($d) or return;
-
-	return $d->serialize();
+	return @found;
 }
+
+	
 # find 'foo(...)', but not 'Foo->foo(...)'
 sub _want_macrocall{
-	my($doc, $elem) = @_;
+	my($doc, $elem, $macro) = @_;
 
-	if($elem->isa('PPI::Token::Word') && exists $doc->{macro}{$elem->content}){
+	# 'foo(...); bar(...); }' 
+	#                      ~ <- UnmatchedBrace
+	if($elem->isa('PPI::Statement::UnmatchedBrace')){
+		return;
+	}
+
+	# 'foo(...)'
+	#  ~~~       <- Word
+	#     ~~~~~  <- List
+	#      ~~~   <- Expression (or nothing)
+	if($elem->isa('PPI::Token::Word') && exists $macro->{ $elem->content }){
 		my $sibling = $elem->sprevious_sibling;
 		if($sibling){ # check "->foo" pattern
 			return 0 if
@@ -173,8 +214,6 @@ sub _list{
 sub _expand{
 	my($self, $word) = @_;
 
-	my $md = $self->{ $word->content };
-
 	# extracting arguments
 	my @args;
 	my $args_list = $word->snext_sibling->clone(); # Structure::List
@@ -186,8 +225,8 @@ sub _expand{
 
 		my $expr = PPI::Statement::Expression->new();
 
+		# split $expr by ','
 		while($token){
-			# find ','
 			if($token->isa('PPI::Token::Operator')
 				and ( $token->content eq ',' or $token->content eq '=>') ){
 				push @args, _list $expr;
@@ -206,25 +245,18 @@ sub _expand{
 	}
 
 	# replacing parameters
-
-	$md = $md->clone(); # copy the macro body
-	if(my $params = $md->find(\&_want_param)){
-
-		foreach my $param(@$params){
-			_param_replace($param, \@args, $args_list);
-		}
-	}
-	elsif($@){
-		warn $@;
+	my $md = $self->{ $word->content }->clone(); # copy the macro body
+	foreach my $param( _ppi_find($md, \&_want_param) ){
+		_param_replace($param, \@args, $args_list);
 	}
 
 	if(DEBUG >= 2){
 		my $funcall = $word->content . $word->snext_sibling->content;
 		my $replaced = $md->content;
 
-		$funcall =~ s/^/# /msxg;
-
-		warn "$funcall -> $replaced\n";
+		my $line = $word->location->[0];
+		$funcall =~ s/^/#$line /msxg;
+		warn "$funcall => $replaced\n";
 	}
 
 	_funcall_replace($word, $md);
@@ -282,7 +314,6 @@ sub _param_replace{
 		my $arg = $args->[_param_idx $param] || _list(PPI::Token::Word->new('undef'));
 		$param->__insert_before( $arg );
 		$param->snext_sibling->remove(); # remove Structure::Subscript
-
 	}
 
 
@@ -295,8 +326,8 @@ sub _funcall_replace{
 	my($word, $block) = @_;
 
 	$word->__insert_before($block);
-	$word->snext_sibling->remove();
-	$word->remove();
+	$word->snext_sibling->remove(); # arglist
+	$word->remove();                # word
 	return;
 }
 
@@ -310,7 +341,7 @@ macro - An implementation of macro processor
 
 =head1 VERSION
 
-This document describes macro version 0.01
+This document describes macro version 0.02
 
 =head1 SYNOPSIS
 
@@ -347,6 +378,8 @@ Returns the backend module, C<macro::filter> or C<macro::compiler>.
 
 Returns an instance of macro processor, C<$macro>.
 
+C<new()>, C<defmacro()> and C<process()> are provided for backend modules.
+
 =head2 $macro->defmacro(name => sub{ ... });
 
 Defines macros into I<$macro>.
@@ -354,8 +387,6 @@ Defines macros into I<$macro>.
 =head2 $macro->process($source)
 
 Processes Perl source code I<$source>, and returns processed source code.
-
-C<new()>, C<defmacro()> and C<process()> are provided for backend modules.
 
 =head1 CONFIGURATION AND ENVIRONMENT
 
@@ -408,9 +439,9 @@ L<http://rt.cpan.org/>.
 
 L<macro::JA>.
 
-L<macro::filter> - source filter backend.
+L<macro::filter> - macro.pm source filter backend.
 
-L<macro::compiler> - compiler backend.
+L<macro::compiler> - macro.pm compiler backend.
 
 =head1 AUTHOR
 

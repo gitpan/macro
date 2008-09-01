@@ -2,7 +2,7 @@ NAME
     macro - An implementation of macro processor
 
 VERSION
-    This document describes macro version 0.01
+    This document describes macro version 0.02
 
 SYNOPSIS
             use macro add => sub{ $_[0] + $_[1] };

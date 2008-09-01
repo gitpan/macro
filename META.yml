@@ -17,8 +17,8 @@ no_index:
     - t
 requires:
   Filter::Util::Call: 1.06
-  PPI: 1.2
+  PPI: 1.203
   perl: 5.8.1
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.01
+version: 0.02

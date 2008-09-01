@@ -2,7 +2,16 @@
 
 use strict;
 
-use Test::More tests => 3;
+use Test::More;
+
+BEGIN{
+	if(eval{ require macro }){
+		plan tests => 3;
+	}
+	else{
+		plan skip_all => $@;
+	}
+}
 
 my $tainted = substr($^X, 0, 0); # safe tainted string
 
