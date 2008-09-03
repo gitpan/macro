@@ -111,25 +111,6 @@ perlを-cスイッチと共に使うことで，C<macro::compiler>によるコ�
 
 実行時の速度はどちらのバックエンドも変わらない。
 
-=head2 NOTE
-
-C<macro::compiler>のスコープは今のところ真のレキシカルスコープではない。
-
-	foo(); # subroutine
-	{
-		foo(); # macro (*1)
-
-		use macro foo => sub { ... };
-
-		foo(); # macro
-	}
-	foo(); # subroutine
-
-上記のコードのB<*1>の行は本来はサブルーチン呼び出しになるべきだが，今のところは
-マクロ呼び出しとなる。
-
-C<macro::filter>ではB<*1>の行はサブルーチン呼び出しである。
-
 =head1 METHOD
 
 =head2 macro->backend()

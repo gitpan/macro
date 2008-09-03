@@ -12,6 +12,9 @@ sub f{
 }
 
 {
+	sub g_before_defmacro{
+		return _g();
+	}
 	use macro _g => sub { __PACKAGE__ . '::g' };
 
 	sub g{
@@ -30,7 +33,7 @@ sub line{
 	return __LINE__;
 }
 sub correct_line{
-	return 30;
+	return 33;
 }
 
 1;

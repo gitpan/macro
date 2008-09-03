@@ -6,7 +6,7 @@ use Test::More;
 
 BEGIN{
 	if(eval{ require macro }){
-		plan tests => 3;
+		plan tests => 5;
 	}
 	else{
 		plan skip_all => $@;
@@ -27,4 +27,11 @@ ok !eval{
 	$macro->defmacro(bar => $tainted); 1
 }, 'died on insecure dependency';
 
-like $@, qr/Insecure dependency/, 'errstr: insecure dependency';
+like $@, qr/Insecure dependency/, 'tainted macro entity: insecure dependency';
+
+
+ok !eval{
+	$macro->defmacro("baz$tainted" => sub{});
+}, 'died on insecure dependency';
+like $@, qr/Insecure dependency/, 'tainted macro name: insecure dependency';
+

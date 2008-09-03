@@ -1,6 +1,6 @@
 #!perl -w
 # Macro Compiling Timer
-# mxtime.pl example/simple.pm
+# mxtime.pl example/simple.pl
 
 use strict;
 use Benchmark ();

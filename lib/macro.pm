@@ -6,19 +6,23 @@ use strict;
 use warnings;
 use warnings::register;
 
+our $VERSION = '0.03';
+use constant DEBUG => $ENV{PERL_MACRO_DEBUG} || 0;
+
 use Scalar::Util (); # tainted()
 use Carp ();
 
-our $VERSION = '0.02';
-
-use constant DEBUG => $ENV{PERL_MACRO_DEBUG} || 0;
-
-use PPI::Lexer;
+use PPI::Document ();
+use PPI::Lexer ();
 my $lexer = PPI::Lexer->new();
+
+use B ();
+use B::Deparse ();
+my $deparser = B::Deparse->new('-si1');
 
 my $backend;
 
-if(DEBUG >= 1 and !$^C){
+if(DEBUG >= 1 && !$^C){
 	require macro::filter;
 	$backend = 'macro::filter';
 }
@@ -36,7 +40,9 @@ sub import{
 	return;
 }
 
-sub backend{ $backend }
+sub backend{
+	return $backend
+}
 
 sub new{
 	my($class) = @_;
@@ -48,34 +54,32 @@ sub defmacro{
 	my $self = shift;
 
 	while(my($name, $macro) = splice @_, 0, 2){
-		if( (not defined $name) or (not defined $macro) ){
-			warnings::warnif(q{Illigal declaration of macro});
+		if( !defined($name) || !defined($macro) ){
+			warnings::warnif('Illigal declaration of macro');
 			next;
 		}
+		if(Scalar::Util::tainted($name) || Scalar::Util::tainted($macro)){
+			Carp::croak('Insecure dependency in macro::defmacro()');
+			return;
+		}
+
 		if(exists $self->{$name}){
 			warnings::warnif(qq{Macro "$name" redefined});
 		}
 
 		if(ref($macro) eq 'CODE'){
-			if(defined prototype $macro){
-				warnings::warnif(q{Macros allow no prototypes});
-			}
 			$macro = _deparse($macro);
 		}
 		else{
-			if(Scalar::Util::tainted($macro)){
-				return Carp::croak('Insecure dependency in macro::defmacro()');
-			}
-
 			# Empty documents are supported by PPI 1.204_01,
 			# but currently we assume PPI <= 1.203
-			$macro .= ' ';
+			$macro .= q{ };
 		}
 
 		my $mdoc = $lexer->lex_source( $self->process($macro) );
 
 		$mdoc->prune(\&_want_useless_element);
-		warn $@ if $@;
+		die $@ if $@;
 
 		$self->{$name} = $mdoc;
 	}
@@ -85,27 +89,40 @@ sub defmacro{
 
 sub _deparse{
 	my($coderef) = @_;
-
-	our $_deparser;
-	unless($_deparser){
-		require B::Deparse;
-
-		$_deparser = B::Deparse->new('-si1');
-		$_deparser->ambient_pragmas(
-			map{ $_ => 'all' } qw(
-				strict warnings utf8 re
-			)
-		);
+	if(defined prototype $coderef){
+		warnings::warnif(q{Subroutine prototype (}.
+			prototype($coderef).q{) ignored});
 	}
 
-	return 'do'.$_deparser->coderef2text($coderef);
+	my $cv = B::svref_2object($coderef);
+
+	if($cv->CvFLAGS & (B::CVf_METHOD | B::CVf_LOCKED | B::CVf_LVALUE) ){
+		my $attr = q{};
+		$attr .= ' :method' if $cv->CvFLAGS & B::CVf_METHOD;
+		$attr .= ' :locked' if $cv->CvFLAGS & B::CVf_LOCKED;
+		$attr .= ' :lvalue' if $cv->CvFLAGS & B::CVf_LVALUE;
+
+		warnings::warnif(qq{Subroutine attribute$attr ignored});
+	}
+
+	if(ref($cv->ROOT) eq 'B::NULL'){
+		my $subr = sprintf '%s &%s::%s',
+			($cv->XSUB ? 'XSUB' : 'undefined subroutine'),
+			 $cv->GV->STASH->NAME, $cv->GV->SAFENAME;
+		Carp::croak("Cannot use $subr as macro entity");
+	}
+	else{
+		my $src = $deparser->coderef2text($coderef);
+		$src =~ s/\A [^\{]+ //xms; # remove prototype and attributes
+		return 'do' . $src;
+	}
 }
 
 sub _want_useless_element{
-	my $elem = $_[1];
+	my(undef, $it) = @_;
 
 	# newline
-	return $elem->isa('PPI::Token::Whitespace') && $elem->content eq "\n";
+	return $it->isa('PPI::Token::Whitespace') && $it->content eq "\n";
 }
 
 sub preprocess{
@@ -116,19 +133,17 @@ sub postprocess{
 }
 
 sub process{
-	my($self, $src) = @_;
+	my($self, $src, $caller) = @_;
 
 	my $document = $lexer->lex_source($src);
 
 	my $d = $self->preprocess($document);
 
 	foreach my $macrocall( reverse _ppi_find($d, \&_want_macrocall, $self) ){
-		$self->_expand($macrocall);
+		$self->_expand($macrocall, $caller);
 	}
 
-	$document = $self->postprocess($document, $d);
-
-	return $document->serialize();
+	return $self->postprocess($d)->top->serialize();
 }
 
 # customized find routine (PPI::Node::find is original)
@@ -166,15 +181,23 @@ sub _ppi_find{
 	return @found;
 }
 
-	
+
 # find 'foo(...)', but not 'Foo->foo(...)'
 sub _want_macrocall{
 	my($doc, $elem, $macro) = @_;
 
+
+	if($elem->{enable}){
+		delete $doc->{skip};
+	}
+	if($doc->{skip}){
+		return 0; # end of _ppi_find()
+	}
+
 	# 'foo(...); bar(...); }' 
 	#                      ~ <- UnmatchedBrace
 	if($elem->isa('PPI::Statement::UnmatchedBrace')){
-		return;
+		return; # end of _ppi_find()
 	}
 
 	# 'foo(...)'
@@ -182,12 +205,11 @@ sub _want_macrocall{
 	#     ~~~~~  <- List
 	#      ~~~   <- Expression (or nothing)
 	if($elem->isa('PPI::Token::Word') && exists $macro->{ $elem->content }){
+
+		# check "->foo" pattern
 		my $sibling = $elem->sprevious_sibling;
-		if($sibling){ # check "->foo" pattern
-			return 0 if
-				$sibling->isa('PPI::Token::Operator')
-					&& $sibling->content eq '->';
-		}
+		return 0 if $sibling && $sibling->isa('PPI::Token::Operator')
+				&& $sibling->content eq q{->};
 
 		# check argument list, e.g. "foo(...)"
 		$sibling = $elem->snext_sibling;
@@ -199,10 +221,10 @@ sub _want_macrocall{
 sub _list{
 	my($element) = @_;
 
-	my $open = PPI::Token::Structure->new( '(' );
+	my $open = PPI::Token::Structure->new( q{(} );
 	my $list = PPI::Structure::List->new($open);
 
-	$list->_set_finish( PPI::Token::Structure->new(')') );
+	$list->_set_finish( PPI::Token::Structure->new( q{)} ) );
 
 	$list->add_element($element) if $element;
 
@@ -212,35 +234,29 @@ sub _list{
 
 
 sub _expand{
-	my($self, $word) = @_;
+	my($self, $word, $caller) = @_;
 
 	# extracting arguments
 	my @args;
 	my $args_list = $word->snext_sibling->clone(); # Structure::List
 
-	my $list = $args_list->schild(0); # Statement::Expression
-
-	if($list){
-		my $token = $list->schild(0);
-
-		my $expr = PPI::Statement::Expression->new();
+	if(my $expr = $args_list->schild(0)){ # Statement::Expression
+		my $arg = PPI::Statement::Expression->new();
 
 		# split $expr by ','
-		while($token){
-			if($token->isa('PPI::Token::Operator')
-				and ( $token->content eq ',' or $token->content eq '=>') ){
-				push @args, _list $expr;
+		foreach my $it($expr->schildren){
+			if($it->isa('PPI::Token::Operator')
+				&& ( $it->content eq q{,} || $it->content eq q{=>}) ){
+				push @args, _list $arg;
 
-				$expr = PPI::Statement::Expression->new();
+				$arg = PPI::Statement::Expression->new();
 			}
 			else{
-				$expr->add_element($token->clone());
+				$arg->add_element($it->clone());
 			}
-		} continue {
-			$token = $token->snext_sibling;
 		}
-		if($expr != $args[-1]){
-			push @args, _list $expr;
+		if($arg != $args[-1]){
+			push @args, _list $arg;
 		}
 	}
 
@@ -254,9 +270,9 @@ sub _expand{
 		my $funcall = $word->content . $word->snext_sibling->content;
 		my $replaced = $md->content;
 
-		my $line = $word->location->[0];
+		my $line = $word->location->[0] + $caller->[2];
 		$funcall =~ s/^/#$line /msxg;
-		warn "$funcall => $replaced\n";
+		print STDERR "$funcall => $replaced\n";
 	}
 
 	_funcall_replace($word, $md);
@@ -268,13 +284,13 @@ sub _expand{
 sub _want_param{
 	my $elem = $_[1];
 
-	return 1 if $elem->isa('PPI::Token::ArrayIndex') && $elem->content eq '$#_';
+	return 1 if $elem->isa('PPI::Token::ArrayIndex') && $elem->content eq q{$#_};
 
 	return 0 unless $elem->isa('PPI::Token::Magic'); # @_ is a magic variable
 
-	return 1 if     $elem->content eq '@_';
+	return 1 if     $elem->content eq q{@_};
 
-	return      $elem->content eq '$_'
+	return      $elem->content eq q{$_}
 
 		&& ($elem = $elem->snext_sibling)
 		&&  $elem->isa('PPI::Structure::Subscript')
@@ -298,14 +314,14 @@ sub _param_replace{
 	my($param, $args, $args_list) = @_;
 
 	# XXX: insert_before() requires $arg->isa('PPI::Token'),
-	#      but $arg->isa('PPI::Structure::List')
+	#      but not ($args[$i] / $args_list)->isa('PPI::Token')
 
-	$param->__insert_before(PPI::Token::Operator->new('+'));
+	$param->__insert_before(PPI::Token::Operator->new(q{+}));
 
-	if($param->content eq '@_'){
+	if($param->content eq q{@_}){
 		$param->__insert_before($args_list);
 	}
-	elsif($param->content eq '$#_'){
+	elsif($param->content eq q{$#_}){
 		my $expr = PPI::Statement::Expression->new();
 		$expr->add_element( PPI::Token::Number->new($#{$args}) );
 		$param->__insert_before(_list $expr);
@@ -341,18 +357,22 @@ macro - An implementation of macro processor
 
 =head1 VERSION
 
-This document describes macro version 0.02
+This document describes macro version 0.03
 
 =head1 SYNOPSIS
 
 	use macro add => sub{ $_[0] + $_[1] };
-	say add(1, 3); # it's replaced into 'say do{ (1) + (3) };'
-
-	use macro sum => sub{ my $sum=0; for my $v(@_){ $sum+=$v }; $sum };
-	say sum(1, 2, 3); # => 6
+	          say => sub{ print @_, "\n"};
+	say(add(1, 3)); # it's replaced into 'print do{ (1) + (3) }, "\n";'
 
 	use macro my_if => sub{ $_[0] ? $_[1] : $_[2] };
-	my_if( 0, print('true'), print('false') ); # only 'false' is printed
+	my_if( 0, say('true'), say('false') ); # only 'false' is printed
+
+	sub mul{ $_[0] * $_[1] }
+	use macro mul => \&mul;
+	say( mul(2, 3) ); # macro version of mul()
+	say(&mul(2, 3) ); # subroutine version
+	say( mul 2, 3  ); # subroutine version
 
 	# or compile only
 	$ perl -c Module.pm # make Module.pmc
@@ -360,7 +380,7 @@ This document describes macro version 0.02
 =head1 DESCRIPTION
 
 The C<macro> pragma provides a sort of inline functions, 
-which is like C pre-processor.
+which is like C pre-processor's macro.
 
 The macros are very fast (about 200% faster than subroutines), but they have
 some limitations that C pre-processor's macros have, e.g. they cannot call
@@ -423,7 +443,7 @@ C<PPI> - Perl parser.
 
 =item *
 
-C<Filter::Util::Call> - Source filter utility.
+C<Filter::Util::Call> - Source filter utility (CORE).
 
 =back
 

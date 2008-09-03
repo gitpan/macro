@@ -12,7 +12,9 @@ use macro say => sub{ print @_, "\n" };
 		foo => sub{ 'macro(1)' },
 		;
 
-	say('Hello, world!');
+	my $hello = 'Hello, world';
+	my $excr  = '!';
+	say( ($hello), do{$excr}, );
 
 	say(q{mul(1+2, 3+4) = }, mul( 1+2, 3+4 ));
 

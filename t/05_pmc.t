@@ -1,7 +1,7 @@
 #!perl -w
 use strict;
 
-use Test::More tests => 13;
+use Test::More tests => 14;
 
 my $debug = $ENV{PERL_MACRO_DEBUG};
 
@@ -45,13 +45,17 @@ is Bar::g(), 'Bar::g', 'Bar::g()';
 is Foo::h(), 'func', 'lexicality in Foo';
 is Bar::h(), 'func', 'lexicality in Bar';
 
+is Bar::g_before_defmacro(), 'func', 'true lexicality in Bar';
+
 {
 	local $TODO = 'Line adjustment not yet implemented';
+
 	is Foo::line(), Foo::correct_line(), 'Foo: correct lineno';
 	is Bar::line(), Bar::correct_line(), 'Bar: correct lineno';
 }
 
 ok !$INC{'macro.pm'}, 'macro.pm was not loaded';
+
 
 unless($debug){
 	unlink($pm1.'c');

@@ -1,5 +1,11 @@
 Revision history for macro
 
+0.03 Wed Sep  3 13:40:26 2008
+	- fix scope-lexicality in macro::compiler
+	- fix the deparse routine with prototypes/attributes to work correctly
+	- fix an issue on freshness check
+	- check validity of supplied subroutines (XSUB, undefined sub)
+
 0.02 Mon Sep  1 09:11:05 2008
 	- add freshness check to macro::compiler
 	- fix scope-lexicality

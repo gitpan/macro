@@ -9,16 +9,35 @@ use PPI::Lexer;
 use PPI::Tokenizer;
 use PPI::Dumper;
 
-printf "$0 (PPI/$PPI::VERSION, Perl %vd)\n", $^V;
+use Getopt::Long;
+
+GetOptions(
+	'locations' => \my $locations,
+	'comments'  => \my $comments,
+	'whitespace'=> \my $whitespace,
+	'all'       => \my $all,
+	'e=s'       => \my $eval_string,
+) or exit(1);
+
+if($all){
+	$locations = $comments = $whitespace = 1;
+}
+
 
 my $tokenizer;
 
-if($ARGV[0] eq '-e'){
-	shift @ARGV;
-	$tokenizer = PPI::Tokenizer->new(\join ';', @ARGV);
-}
-else{
-	$tokenizer = PPI::Tokenizer->new(@ARGV);
+eval{
+	if($eval_string){
+		shift @ARGV;
+		$tokenizer = PPI::Tokenizer->new(\$eval_string);
+	}
+	else{
+		$tokenizer = PPI::Tokenizer->new(@ARGV);
+	}
+};
+
+if($@){
+	die $@->message, "\n";
 }
 
 unless(ref $tokenizer){
@@ -27,11 +46,12 @@ unless(ref $tokenizer){
 
 my $document = PPI::Lexer->new()->lex_tokenizer($tokenizer);
 
+printf "$0 (PPI/$PPI::VERSION, Perl %vd)\n", $^V;
 
 PPI::Dumper->new($document, 
-	whitespace => 0,
-	comments   => 0,
-	locations  => 0,
+	whitespace => $whitespace,
+	comments   => $comments,
+	locations  => $locations,
 )->print();
 
 # PPI::Document provides complete() method,

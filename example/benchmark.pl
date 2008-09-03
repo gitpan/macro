@@ -4,9 +4,10 @@ use strict;
 
 use Benchmark qw(:all);
 
-BEGIN{ $ENV{PERL_MACRO_DEBUG} = 1 }
-use macro add => sub{ $_[0] + $_[1] };
+
 sub add{ $_[0] + $_[1] }
+
+use macro::filter add => \&add;
 
 print "Benchmark of macro/$macro::VERSION\n";
 

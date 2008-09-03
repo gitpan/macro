@@ -21,6 +21,7 @@ sub import{
 
 	$self->defmacro(@_);
 
+	
 	Filter::Util::Call::filter_add($self);
 	return;
 }
@@ -32,7 +33,7 @@ sub filter{
 
 	1 while Filter::Util::Call::filter_read();
 
-	$_ = $self->process( $_ );
+	$_ = $self->process( $_, [caller]);
 
 	return 1;
 }

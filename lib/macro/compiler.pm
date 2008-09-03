@@ -17,13 +17,13 @@ sub import{
 
 	return unless @_;
 
-	my $file = do{
+	my($pkg, $file) = do{
 		my $i = 0;
 		my($pkg, $file) = (caller($i))[0, 1];
 		while($pkg->isa('macro')){
 			($pkg, $file) = (caller(++$i))[0, 1]
 		}
-		$file;
+		($pkg, $file);
 	};
 
 	if($^C and not $compiled{$file}){
@@ -54,7 +54,7 @@ sub import{
 	{ local $/; $src .= <$fh> };
 	close $fh;
 
-	$src = $self->process($src);
+	$src = $self->process($src, [$pkg, $file, -12]);
 
 	open $fh, '>:perlio', $file.'c'
 		or die qq{Cannot open "${file}c" for writing: $!};
@@ -79,7 +79,7 @@ sub preprocess{
 	my($self, $d) = @_;
 
 	my $elem = $d->find_first(\&_want_use_macro);
-	warn $@ if $@;
+	die $@ if $@;
 
 	if($elem){
 
@@ -89,7 +89,11 @@ sub preprocess{
 
 		$d = $elem->parent;
 
-		$elem->__insert_before( PPI::Token::Comment->new($stmt) );
+		$stmt = PPI::Token::Comment->new($stmt); # comment out the statement
+		$stmt->{enable} = 1;
+		$d->{skip} = 1;
+
+		$elem->__insert_before($stmt);
 		$elem->remove();
 	}
 
@@ -175,8 +179,8 @@ sub _sign{
 # ANY CHANGES MADE HERE WILL BE LOST!
 # ============================= freshness check =============================
 # line 1 $file
-BEGIN{ my \$o = q{$file}; # original file
-if((stat \$o)[9] != $mtime){ my \$f=do{ open my \$in,'<',\$o or
+BEGIN{ my \$o = q{$file}; my \$mtime = (stat \$o)[9];
+if(\$mtime and \$mtime != $mtime){ my \$f=do{ open my \$in,'<',\$o or
 die(qq{Cannot open \$o: \$!});local \$/;<\$in>;};require Filter::Util::Call;
 Filter::Util::Call::filter_add(sub{ Filter::Util::Call::filter_del();
 1 while Filter::Util::Call::filter_read(); \$_ = \$f; return 1; }); } }
