@@ -1,8 +1,11 @@
-#!perl -w
-
+#!perl
+package
+	Foo;
 use strict;
+use warnings;
+#use 5.10.0;
 
-BEGIN{ $ENV{PERL_MACRO_DEBUG} ||= 0 }
+BEGIN{ $ENV{PERL_MACRO_DEBUG} = 0 unless defined $ENV{PERL_MACRO_DEBUG} }
 
 use macro say => sub{ print @_, "\n" };
 

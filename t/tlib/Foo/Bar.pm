@@ -1,5 +1,5 @@
 package
-	Bar;
+	Foo::Bar;
 
 use strict;
 use warnings;

@@ -22,6 +22,7 @@ my $macro = macro->new();
 ok eval{
 	$macro->defmacro(foo => ''); 1;
 }, 'untainted';
+warn $@ if $@;
 
 ok !eval{
 	$macro->defmacro(bar => $tainted); 1

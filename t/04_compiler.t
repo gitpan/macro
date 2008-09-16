@@ -7,9 +7,13 @@ use Test::More tests => 10;
 use FindBin qw($Bin);
 use lib "$Bin/tlib";
 
+my($pm1, $pm2);
 BEGIN{
-	unlink "$Bin/tlib/Foo.pmc";
-	unlink "$Bin/tlib/Bar.pmc";
+	$pm1 = "$Bin/tlib/Foo.pmc";
+	$pm2 = "$Bin/tlib/Foo/Bar.pmc";
+
+	unlink $pm1;
+	unlink $pm2;
 
 	$ENV{PERL_MACRO_DEBUG} = 0;
 }
@@ -19,7 +23,7 @@ use macro;
 is(macro::->backend, 'macro::compiler', 'using macro::compiler');
 
 use Foo;
-use Bar;
+use Foo::Bar;
 
 sub _f{
 	'Baz';
@@ -27,18 +31,18 @@ sub _f{
 
 is Foo::f(), 'Foo::f', 'Foo::f()';
 is Foo::g(), 'Foo::g', 'Foo::g()';
-is Bar::f(), 'Bar::f', 'Bar::f()';
-is Bar::g(), 'Bar::g', 'Bar::g()';
+is Foo::Bar::f(), 'Foo::Bar::f', 'Foo::Bar::f()';
+is Foo::Bar::g(), 'Foo::Bar::g', 'Foo::Bar::g()';
 
 
 is Foo::h(), 'func', 'lexicality in Foo';
-is Bar::h(), 'func', 'lexicality in Bar';
+is Foo::Bar::h(), 'func', 'lexicality in Bar';
 
 
 is Foo::line(), Foo::correct_line(), 'Foo: correct lineno';
-is Bar::line(), Bar::correct_line(), 'Bar: correct lineno';
+is Foo::Bar::line(), Foo::Bar::correct_line(), 'Bar: correct lineno';
 
 is _f(),     'Baz', 'file scoped';
 
-unlink("$Bin/tlib/Foo.pmc");
-unlink("$Bin/tlib/Bar.pmc");
+unlink $pm1;
+unlink $pm2;

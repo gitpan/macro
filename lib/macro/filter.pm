@@ -6,8 +6,7 @@ use warnings;
 BEGIN{
 	require macro;
 	our @ISA = qw(macro);
-
-	*VERSION = *macro::VERSION;
+	*VERSION = \$macro::VERSION;
 }
 
 use Filter::Util::Call ();
@@ -26,7 +25,7 @@ sub import{
 	return;
 }
 
-sub filter{
+sub filter :method{
 	my($self) = @_;
 
 	Filter::Util::Call::filter_del();
@@ -56,7 +55,7 @@ L<macro>.
 
 =head1 AUTHOR
 
-Goro Fuji E<lt>gfuji(at)cpan.orgE<gt>.
+Goro Fuji E<lt>gfuji(at)cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 

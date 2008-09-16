@@ -85,6 +85,8 @@ Cプリプロセッサのマクロと同じく，C<$_[0]>などのプレース�
 
 	use macro println => sub{ print "@_\n" }; # おそらく予想外の挙動
 
+マクロの中ではC<package>やプラグマの効果はなく，呼び出し元の環境の下で実行される。
+
 =head2 BACKEND MODULE
 
 このモジュールのバックエンドとして，C<macro::filter>とC<macro::compiler>が
@@ -102,6 +104,8 @@ C<macro::compiler>はC<Module::Compile>に似たスクリプトコンパイラ�
 のスクリプトファイルは常に高速に動作する。また，コンパイルされたファイルは，
 オリジナルファイルの修正時間(mtime)に基づくチェックを行い，自動的に再コンパイル
 を行う。
+オリジナルファイルはコンパイル済みファイルと同じディレクトリにあると仮定され，
+折地鳴りファイルが見つからない場合はいかなるチェックも行われない。
 
 perlを-cスイッチと共に使うことで，C<macro::compiler>によるコンパイルのみを行う
 こともできる。
@@ -111,11 +115,25 @@ perlを-cスイッチと共に使うことで，C<macro::compiler>によるコ�
 
 実行時の速度はどちらのバックエンドも変わらない。
 
+=head2 PMC Support
+
+C<macro>を使うモジュールは，C<Module::Install::PMC>を使ってインストールの前にモジュールをコンパイルすることができる。
+そのためには，C<Makefile.PL>に以下のように書けばよい。
+
+	use inc::Module::Install;
+	...
+	build_requires macro => 0;
+	pmc_support;
+	...
+
+L<Module::Compile>とL<Module::Install::PMC>も参照せよ。
+
 =head1 METHOD
 
 =head2 macro->backend()
 
-バックエンドモジュールを返す。これはC<macro::filter>かC<macro::compiler>である。
+バックエンドモジュールの名前を返す。
+これはC<macro::filter>かC<macro::compiler>である。
 
 C<macro::compiler>バックエンドによってコンパイルされたファイルは，C<macro.pm>
 をロードしないため，C<<macro->backend()>>を呼び出すことができないので注意せよ。
@@ -190,7 +208,7 @@ L<macro::compiler> - macro.pm compiler backend.
 
 =head1 AUTHOR
 
-Goro Fuji E<lt>gfuji(at)cpan.orgE<gt>.
+Goro Fuji E<lt>gfuji(at)cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 

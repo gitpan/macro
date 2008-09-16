@@ -6,7 +6,7 @@ use strict;
 use warnings;
 use warnings::register;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 use constant DEBUG => $ENV{PERL_MACRO_DEBUG} || 0;
 
 use Scalar::Util (); # tainted()
@@ -18,7 +18,7 @@ my $lexer = PPI::Lexer->new();
 
 use B ();
 use B::Deparse ();
-my $deparser = B::Deparse->new('-si1');
+my $deparser = B::Deparse->new('-si0', '-x9');
 
 my $backend;
 
@@ -41,16 +41,16 @@ sub import{
 }
 
 sub backend{
-	return $backend
+	return $backend;
 }
 
-sub new{
+sub new :method{
 	my($class) = @_;
 
 	return bless {} => $class;
 }
 
-sub defmacro{
+sub defmacro :method{
 	my $self = shift;
 
 	while(my($name, $macro) = splice @_, 0, 2){
@@ -67,13 +67,15 @@ sub defmacro{
 			warnings::warnif(qq{Macro "$name" redefined});
 		}
 
+		my $optimize;
 		if(ref($macro) eq 'CODE'){
 			$macro = _deparse($macro);
+			$optimize = 1;
 		}
 		else{
 			# Empty documents are supported by PPI 1.204_01,
 			# but currently we assume PPI <= 1.203
-			$macro .= q{ };
+			$macro = q{ } if $macro eq '';
 		}
 
 		my $mdoc = $lexer->lex_source( $self->process($macro) );
@@ -81,7 +83,7 @@ sub defmacro{
 		$mdoc->prune(\&_want_useless_element);
 		die $@ if $@;
 
-		$self->{$name} = $mdoc;
+		$self->{$name} = $optimize ? $self->_optimize($mdoc) : $mdoc;
 	}
 
 	return;
@@ -89,23 +91,9 @@ sub defmacro{
 
 sub _deparse{
 	my($coderef) = @_;
-	if(defined prototype $coderef){
-		warnings::warnif(q{Subroutine prototype (}.
-			prototype($coderef).q{) ignored});
-	}
-
 	my $cv = B::svref_2object($coderef);
 
-	if($cv->CvFLAGS & (B::CVf_METHOD | B::CVf_LOCKED | B::CVf_LVALUE) ){
-		my $attr = q{};
-		$attr .= ' :method' if $cv->CvFLAGS & B::CVf_METHOD;
-		$attr .= ' :locked' if $cv->CvFLAGS & B::CVf_LOCKED;
-		$attr .= ' :lvalue' if $cv->CvFLAGS & B::CVf_LVALUE;
-
-		warnings::warnif(qq{Subroutine attribute$attr ignored});
-	}
-
-	if(ref($cv->ROOT) eq 'B::NULL'){
+	if(ref($cv->START) eq 'B::NULL'){
 		my $subr = sprintf '%s &%s::%s',
 			($cv->XSUB ? 'XSUB' : 'undefined subroutine'),
 			 $cv->GV->STASH->NAME, $cv->GV->SAFENAME;
@@ -113,17 +101,68 @@ sub _deparse{
 	}
 	else{
 		my $src = $deparser->coderef2text($coderef);
-		$src =~ s/\A [^\{]+ //xms; # remove prototype and attributes
+		if($src =~ s/\A ( [^\{]+ ) //xms){ # remove prototype and attributes
+			my $s = $1;
+			if($s =~ /( \( .+ \) )/xms){
+				warnings::warnif("Subroutine prototype $1 ignored");
+			}
+			if($s =~ /(: \s+ \w+)/xms){
+				warnings::warnif("Subroutine attribute $1 ignored");
+			}
+		}
 		return 'do' . $src;
 	}
 }
 
+my %rm_module = map{ $_ => 1 } qw(strict warnings diagnostics);
 sub _want_useless_element{
 	my(undef, $it) = @_;
 
 	# newline
-	return $it->isa('PPI::Token::Whitespace') && $it->content eq "\n";
+	return 1 if $it->isa('PPI::Token::Whitespace') && $it->content eq "\n";
+
+	# semi-colon at the end of the block
+	return 1 if $it->isa('PPI::Token::Structure') && $it->content eq ';'
+		&& !$it->parent->snext_sibling;
+
+	# package statements created by B::Deparse
+	return 1 if $it->isa('PPI::Statement::Package');
+
+	# BEGIN {} created by B::Deparse
+	return 1 if $it->isa('PPI::Statement::Scheduled');
+
+	# use VERSION || strict || warnings || diagnostics
+	return 0 unless $it->isa('PPI::Statement::Include') && $it->type eq 'use';
+	return $it->version || $rm_module{ $it->module };
 }
+
+sub _optimize{
+	my(undef, $md) = @_;
+
+	# do{ single-statement; } -> +(single-statement)
+
+	my @stmt = $md->schild(0)->schild(0)->snext_sibling->schildren;
+
+	if(@stmt == 1 && (ref($stmt[0]) eq 'PPI::Statement')
+		&& !$stmt[0]->find_any(\&_want_not_simple)){
+
+		my $expr = PPI::Statement::Expression->new();
+		$expr->add_element(PPI::Token::Operator->new('+'));
+		$expr->add_element(_list( $stmt[0]->clone() ));
+		return $expr;
+	}
+
+	return $md;
+}
+my %not_simple = map{ $_ => 1 }
+	qw(my our local state for foreach while until);
+sub _want_not_simple{
+	my(undef, $it) = @_;
+
+	return $it->isa('PPI::Token::Word') && $not_simple{$it->content};
+}
+
+############################ process ############################
 
 sub preprocess{
 	return $_[1]; # noop
@@ -132,7 +171,7 @@ sub postprocess{
 	return $_[1]; # noop
 }
 
-sub process{
+sub process :method{
 	my($self, $src, $caller) = @_;
 
 	my $document = $lexer->lex_source($src);
@@ -357,7 +396,7 @@ macro - An implementation of macro processor
 
 =head1 VERSION
 
-This document describes macro version 0.03
+This document describes macro version 0.04
 
 =head1 SYNOPSIS
 
@@ -387,6 +426,21 @@ some limitations that C pre-processor's macros have, e.g. they cannot call
 C<return()> expectedly, although they seem anonymous subroutines.
 
 Try C<PERL_MACRO_DEBUG=2> if you want to know how this module works.
+
+=head2 PMC Support
+
+Modules using C<macro> are able to compile themselves before installed,
+by using the C<Module::Install::PMC>.
+Write the following to the C<Makefile.PL> and the modules will be compiled at
+build time.
+
+	use inc::Module::Install;
+	...
+	build_requires macro => 0;
+	pmc_support;
+	...
+
+See L<Module::Compile> and L<Module::Install::PMC> for details.
 
 =head1 METHOD
 
@@ -463,9 +517,11 @@ L<macro::filter> - macro.pm source filter backend.
 
 L<macro::compiler> - macro.pm compiler backend.
 
+L<Module::Compile>.
+
 =head1 AUTHOR
 
-Goro Fuji E<lt>gfuji(at)cpan.orgE<gt>.
+Goro Fuji E<lt>gfuji(at)cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
