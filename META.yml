@@ -1,13 +1,14 @@
 ---
 abstract: 'An implementation of macro processor'
 author:
-  - 'Goro Fuji <gfuji(at)cpan.org>'
+  - 'Goro Fuji <gfuji(at)cpan.org>.'
 build_requires:
+  ExtUtils::MakeMaker: 6.42
   Test::Warn: 0.11
 configure_requires:
-  ExtUtils::MakeMaker: 6.44
+  ExtUtils::MakeMaker: 6.42
 distribution_type: module
-generated_by: 'Module::Install version 0.77'
+generated_by: 'Module::Install version 0.91'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -15,12 +16,15 @@ meta-spec:
 name: macro
 no_index:
   directory:
+    - example
     - inc
     - t
+    - xt
 requires:
   Filter::Util::Call: 1.06
   PPI: 1.203
   perl: 5.8.1
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.04
+  repository: git://github.com/gfx/Perl-macro.git
+version: 0.05
