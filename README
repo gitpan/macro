@@ -2,7 +2,7 @@ NAME
     macro - An implementation of macro processor
 
 VERSION
-    This document describes macro version 0.04
+    This document describes macro version 0.06.
 
 SYNOPSIS
             use macro add => sub{ $_[0] + $_[1] };
@@ -22,8 +22,8 @@ SYNOPSIS
             $ perl -c Module.pm # make Module.pmc
 
 DESCRIPTION
-    The "macro" pragma provides a sort of inline functions, which is like C
-    pre-processor's macro.
+    The "macro" pragma provides macros, a sort of inline functions, which is
+    like C pre-processor's macro.
 
     The macros are very fast (about 200% faster than subroutines), but they
     have some limitations that C pre-processor's macros have, e.g. they
@@ -45,7 +45,7 @@ DESCRIPTION
 
     See Module::Compile and Module::Install::PMC for details.
 
-METHOD
+METHODS
   macro->backend()
     Returns the backend module, "macro::filter" or "macro::compiler".
 
@@ -62,7 +62,7 @@ METHOD
 
 CONFIGURATION AND ENVIRONMENT
   PERL_MACRO_DEBUG=value
-    Debug mode.
+    Sets the debug mode.
 
     if it's == 0, "macro::compiler" is used as the backend.
 
@@ -101,10 +101,11 @@ SEE ALSO
     Module::Compile.
 
 AUTHOR
-    Goro Fuji <gfuji(at)cpan.org>
+    Goro Fuji <gfuji(at)cpan.org>.
 
 LICENSE AND COPYRIGHT
-    Copyright (c) 2008, Goro Fuji <gfuji(at)cpan.org>. Some rights reserved.
+    Copyright (c) 2008-2009, Goro Fuji <gfuji(at)cpan.org>. Some rights
+    reserved.
 
     This module is free software; you can redistribute it and/or modify it
     under the same terms as Perl itself.

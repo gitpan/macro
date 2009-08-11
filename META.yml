@@ -13,6 +13,7 @@ license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
+module_name: macro
 name: macro
 no_index:
   directory:
@@ -22,9 +23,9 @@ no_index:
     - xt
 requires:
   Filter::Util::Call: 1.06
-  PPI: 1.203
+  PPI: 1.205
   perl: 5.8.1
 resources:
   license: http://dev.perl.org/licenses/
   repository: git://github.com/gfx/Perl-macro.git
-version: 0.05
+version: 0.06

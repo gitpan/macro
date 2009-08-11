@@ -6,7 +6,8 @@ use strict;
 use warnings;
 use warnings::register;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
+
 use constant DEBUG => $ENV{PERL_MACRO_DEBUG} ? 1 : 0;
 
 use Scalar::Util (); # tainted()
@@ -71,11 +72,6 @@ sub defmacro :method{
 		if(ref($macro) eq 'CODE'){
 			$macro = _deparse($macro);
 			$optimize = 1;
-		}
-		else{
-			# Empty documents are supported by PPI 1.204_01,
-			# but currently we assume PPI <= 1.203
-			$macro = q{ } if $macro eq '';
 		}
 
 		my $mdoc = $lexer->lex_source( $self->process($macro) );
@@ -156,6 +152,7 @@ sub _optimize{
 }
 my %not_simple = map{ $_ => 1 }
 	qw(my our local state for foreach while until);
+
 sub _want_not_simple{
 	my(undef, $it) = @_;
 
@@ -263,7 +260,7 @@ sub _list{
 	my $open = PPI::Token::Structure->new( q{(} );
 	my $list = PPI::Structure::List->new($open);
 
-	$list->_set_finish( PPI::Token::Structure->new( q{)} ) );
+	$list->{finish} = PPI::Token::Structure->new( q{)} );
 
 	$list->add_element($element) if $element;
 
@@ -286,7 +283,7 @@ sub _expand{
 		foreach my $it($expr->schildren){
 			if($it->isa('PPI::Token::Operator')
 				&& ( $it->content eq q{,} || $it->content eq q{=>}) ){
-				push @args, _list $arg;
+				push @args, _list($arg);
 
 				$arg = PPI::Statement::Expression->new();
 			}
@@ -295,7 +292,7 @@ sub _expand{
 			}
 		}
 		if($arg != $args[-1]){
-			push @args, _list $arg;
+			push @args, _list($arg);
 		}
 	}
 
@@ -363,7 +360,7 @@ sub _param_replace{
 	elsif($param->content eq q{$#_}){
 		my $expr = PPI::Statement::Expression->new();
 		$expr->add_element( PPI::Token::Number->new($#{$args}) );
-		$param->__insert_before(_list $expr);
+		$param->__insert_before(_list($expr));
 	}
 	else{ # $_[index]
 		my $arg = $args->[_param_idx $param] || _list(PPI::Token::Word->new('undef'));
@@ -396,7 +393,7 @@ macro - An implementation of macro processor
 
 =head1 VERSION
 
-This document describes macro version 0.05
+This document describes macro version 0.06.
 
 =head1 SYNOPSIS
 
